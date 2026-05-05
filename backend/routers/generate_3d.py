@@ -6,10 +6,11 @@ import httpx
 
 from services.triposr_client import generate_3d_triposr
 from services.pollinations_client import generate_image_pollinations
-from utils.image_utils import bytes_to_base64
 
 router = APIRouter(prefix="/generate-3d", tags=["3D Generation"])
 
+
+# ─── Request Models ───────────────────────────────────────────────────────────
 
 class Generate3DFromImageRequest(BaseModel):
     image_base64: str
@@ -21,9 +22,11 @@ class Generate3DFromTextRequest(BaseModel):
     height: Optional[int] = 1024
 
 
+# ─── Endpoints ────────────────────────────────────────────────────────────────
+
 @router.post("/from-image")
 async def generate_3d_from_image(request: Generate3DFromImageRequest):
-    """Image → .GLB via free HF TripoSR Space."""
+    """Image → .GLB via TripoSR HF Space (free, with wake-up retry)."""
     try:
         result = await generate_3d_triposr(image_base64=request.image_base64)
         return {"status": "success", **result}
@@ -33,16 +36,24 @@ async def generate_3d_from_image(request: Generate3DFromImageRequest):
 
 @router.post("/from-text")
 async def generate_3d_from_text(request: Generate3DFromTextRequest):
-    """Text → image (Pollinations) → .GLB (TripoSR). Fully free."""
+    """
+    Two-step fully free pipeline:
+      1. Text → image via Pollinations.ai (no key, FLUX model)
+      2. Image → .GLB via TripoSR HF Space (free, with wake-up retry)
+    """
     try:
+        # Step 1: text → image
         image_result = await generate_image_pollinations(
             prompt=request.prompt,
             width=request.width,
             height=request.height,
         )
+
+        # Step 2: image → 3D (with automatic wake-up + retry logic)
         model_result = await generate_3d_triposr(
             image_base64=image_result["image_base64"]
         )
+
         return {
             "status": "success",
             "intermediate_image_base64": image_result["image_base64"],
@@ -55,16 +66,21 @@ async def generate_3d_from_text(request: Generate3DFromTextRequest):
 
 @router.get("/download")
 async def download_model(url: str, filename: Optional[str] = "model.glb"):
-    """Proxy-download — streams .GLB to browser, avoids CORS."""
+    """
+    Proxy-download endpoint — streams .GLB/.OBJ to browser.
+    Avoids CORS issues with direct HF Space CDN URLs.
+    Usage: GET /generate-3d/download?url=<glb_url>&filename=model.glb
+    """
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            response = await client.get(url)
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.get(url, follow_redirects=True)
             response.raise_for_status()
 
         fmt = filename.split(".")[-1].lower()
         content_type_map = {
-            "glb": "model/gltf-binary",
-            "obj": "text/plain",
+            "glb":  "model/gltf-binary",
+            "obj":  "text/plain",
+            "mtl":  "text/plain",
             "gltf": "model/gltf+json",
         }
         content_type = content_type_map.get(fmt, "application/octet-stream")
