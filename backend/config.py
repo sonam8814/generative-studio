@@ -3,14 +3,19 @@ import os
 
 load_dotenv()
 
-FAL_KEY = os.getenv("FAL_KEY")
-STABILITY_KEY = os.getenv("STABILITY_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN", "")  # free HF token — only needed for ControlNet
 
-# Fal.ai model endpoints
-FAL_IMAGE_MODEL    = "fal-ai/flux/schnell"          # fast text-to-image
-FAL_CONTROLNET     = "fal-ai/controlnet-scribble"   # sketch-to-image
-FAL_3D_MODEL       = "fal-ai/triposr"               # image-to-3D
-FAL_REMBG_MODEL    = "fal-ai/imageutils/rembg"      # background removal
+# ── 2D: Pollinations.ai (no key, no auth) ─────────────────────────────────────
+POLLINATIONS_URL = "https://image.pollinations.ai/prompt/{prompt}"
 
-# Stability AI
-STABILITY_API_URL  = "https://api.stability.ai/v2beta/stable-image/generate/core"
+# ── Sketch-to-Image: HF Inference API ─────────────────────────────────────────
+HF_CONTROLNET_URL = (
+    "https://api-inference.huggingface.co/models/"
+    "lllyasviel/sd-controlnet-scribble"
+)
+
+# ── Background Removal: rembg (local, ~50MB, no GPU) ──────────────────────────
+# No URL needed — runs in-process
+
+# ── 3D: HF Space TripoSR (free public space, no key) ──────────────────────────
+TRIPOSR_SPACE_URL = "https://stabilityai-triposr.hf.space"
